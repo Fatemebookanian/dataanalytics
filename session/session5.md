@@ -106,3 +106,174 @@ BBOX = (51.376259, 35.700060, 51.457455, 35.741859)
 طول جغرافیایی بالا (East Longitude): 51.457455
 
 عرض جغرافیایی بالا (North Latitude): 35.741859
+
+```
+
+
+
+
+## کد کامل برای دریافت داده‌های ترافیکی از Mapbox
+
+```python
+import os
+import requests
+import geopandas as gpd
+import pandas as pd
+import mercantile
+
+BBOX = (51.376259, 35.700060, 51.457455, 35.741859)
+ZOOM = 14
+OUT_DIR = os.path.join('data', 'traffic')
+os.makedirs(OUT_DIR, exist_ok=True)
+
+tile_ul = mercantile.tile(BBOX[0], BBOX[3], ZOOM)
+tile_lr = mercantile.tile(BBOX[2], BBOX[1], ZOOM)
+
+x_min, x_max = min(tile_ul.x, tile_lr.x), max(tile_ul.x, tile_lr.x)
+y_min, y_max = min(tile_ul.y, tile_lr.y), max(tile_ul.y, tile_lr.y)
+
+URL_Template = 'https://api.mapbox.com/v4/mapbox.mapbox-traffic-v1.json?access_token=YOUR_ACCESS_TOKEN&bbox={}&zoom={}'
+for x in range(x_min, x_max + 1):
+    for y in range(y_min, y_max + 1):
+        url = URL_Template.format(f'{BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]}', ZOOM)
+        outfile = os.path.join(OUT_DIR, f"{ZOOM}_{x}_{y}.mvt")
+
+        try:
+            resp = requests.get(url, headers=None, timeout=15)
+
+            if resp.status_code == 200 and resp.content:
+                with open(outfile, 'wb') as f:
+                    f.write(resp.content)
+            else:
+                print(f"[WARN] {resp.status_code}: {url}")
+        except Exception as e:
+            print(f"[ERROR] {e}: {url}")
+
+gdfs = []
+for file in os.listdir(OUT_DIR):
+    if file.endswith('.mvt'):
+        mvt_path = os.path.join(OUT_DIR, file)
+        gdf = gpd.read_file(mvt_path)
+        gdfs.append(gdf)
+
+merge_gdfs = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True), crs=gdfs[0].crs)
+merge_gdfs.to_file(os.path.join(OUT_DIR, 'traffic.shp'))
+```
+
+
+ساخت پوشه مقصد در صورت عدم وجود:
+```python
+os.makedirs(OUT_DIR, exist_ok=True)
+```
+
+
+این خط از کد بررسی می‌کند که آیا پوشه data/traffic وجود دارد یا خیر. اگر وجود نداشته باشد، آن را می‌سازد. گزینه exist_ok=True باعث می‌شود اگر پوشه قبلاً وجود داشته باشد، خطا ندهد.
+
+تبدیل مختصات به تایل‌ها:
+```python
+tile_ul = mercantile.tile(BBOX[0], BBOX[3], ZOOM)
+tile_lr = mercantile.tile(BBOX[2], BBOX[1], ZOOM)
+```
+
+
+
+در اینجا با استفاده از کتابخانه mercantile، مختصات گوشه بالا سمت چپ و پایین سمت راست Bounding Box (مستطیل محصور) به تایل‌های Web Mercator تبدیل می‌شوند. این تبدیل به ما این امکان را می‌دهد که داده‌ها را به صورت تایل‌های کوچک از Mapbox درخواست کنیم.
+
+BBOX[0]: طول جغرافیایی غرب (minimum longitude).
+
+BBOX[1]: عرض جغرافیایی پایین (minimum latitude).
+
+BBOX[2]: طول جغرافیایی شرق (maximum longitude).
+
+BBOX[3]: عرض جغرافیایی بالا (maximum latitude).
+
+
+محاسبه مرزهای تایل‌ها:
+```python
+x_min, x_max = min(tile_ul.x, tile_lr.x), max(tile_ul.x, tile_lr.x)
+y_min, y_max = min(tile_ul.y, tile_lr.y), max(tile_ul.y, tile_lr.y)
+```
+
+
+
+این کد مرزهای افقی و عمودی تایل‌ها را محاسبه می‌کند. برای مثال، اگر چندین تایل در منطقه خاصی نیاز داریم، این خطوط مرزهای آن تایل‌ها را مشخص می‌کند.
+
+
+
+در این خط، یک قالب URL برای دریافت داده‌های ترافیکی از Mapbox تعریف می‌شود. با استفاده از این URL می‌توان داده‌های ترافیکی مربوط به هر تایل را دریافت کرد. پارامترهای bbox و zoom به ترتیب مربوط به محدوده جغرافیایی و سطح بزرگنمایی هستند.
+
+درخواست داده‌ها از Mapbox
+```python
+for x in range(x_min, x_max + 1):
+    for y in range(y_min, y_max + 1):
+        url = URL_Template.format(f'{BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]}', ZOOM)
+        outfile = os.path.join(OUT_DIR, f"{ZOOM}_{x}_{y}.mvt")
+
+```
+
+
+در این حلقه‌های for، برای هر تایل در منطقه مشخص‌شده، یک درخواست به Mapbox ارسال می‌شود. x و y مختصات افقی و عمودی هر تایل هستند. سپس داده‌ها برای هر تایل در فایل‌های .mvt ذخیره می‌شوند.
+
+ارسال درخواست HTTP به Mapbox:
+```python
+resp = requests.get(url, headers=None, timeout=15)
+```
+
+
+در این خط، درخواست GET به Mapbox ارسال می‌شود تا داده‌های ترافیکی برای تایل خاص دریافت شود. همچنین برای جلوگیری از وقفه‌های طولانی، زمان تایم‌اوت 15 ثانیه تعیین شده است.
+
+بررسی وضعیت پاسخ و ذخیره داده‌ها:
+```python
+if resp.status_code == 200 and resp.content:
+    with open(outfile, 'wb') as f:
+        f.write(resp.content)
+```
+
+اگر پاسخ موفقیت‌آمیز باشد (کد وضعیت 200) و داده‌ها وجود داشته باشند، این داده‌ها در فایلی که نامش شامل سطح زوم و شماره تایل است ذخیره می‌شود.
+
+مدیریت خطاها:
+```python
+
+else:
+    print(f"[WARN] {resp.status_code}: {url}")
+```
+
+اگر درخواست به Mapbox موفقیت‌آمیز نباشد، کد وضعیت و URL درخواست چاپ می‌شود تا بتوان دلیل مشکل را شناسایی کرد.
+
+مدیریت استثناها:
+```python
+
+except Exception as e:
+    print(f"[ERROR] {e}: {url}")
+```
+
+در صورتی که خطایی در طول ارسال درخواست یا ذخیره‌سازی فایل پیش آید، پیام خطا همراه با URL درخواست چاپ می‌شود تا بتوان خطا را پیگیری کرد.
+
+خواندن و پردازش داده‌های .mvt:
+```python
+gdfs = []
+for file in os.listdir(OUT_DIR):
+    if file.endswith('.mvt'):
+        mvt_path = os.path.join(OUT_DIR, file)
+        gdf = gpd.read_file(mvt_path)
+        gdfs.append(gdf)
+```
+
+تمام فایل‌های .mvt که در پوشه OUT_DIR ذخیره شده‌اند خوانده می‌شوند و به یک لیست از GeoDataFrame‌ها (gdfs) اضافه می‌شوند. این داده‌ها بعداً برای ترکیب استفاده خواهند شد.
+
+ترکیب داده‌ها در یک GeoDataFrame:
+```python
+
+merge_gdfs = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True), crs=gdfs[0].crs)
+```
+
+تمام GeoDataFrame‌های خوانده‌شده از فایل‌های .mvt به یک GeoDataFrame واحد ترکیب می‌شوند. این ترکیب به ما این امکان را می‌دهد که تمام داده‌ها را در یک مجموعه داشته باشیم.
+
+ذخیره داده‌های نهایی به‌صورت Shapefile:
+```python
+
+merge_gdfs.to_file(os.path.join(OUT_DIR, 'traffic.shp'))
+```
+
+در نهایت، داده‌های ترکیب‌شده به فرمت Shapefile ذخیره می‌شوند.
+
