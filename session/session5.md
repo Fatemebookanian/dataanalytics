@@ -132,10 +132,13 @@ tile_lr = mercantile.tile(BBOX[2], BBOX[1], ZOOM)
 x_min, x_max = min(tile_ul.x, tile_lr.x), max(tile_ul.x, tile_lr.x)
 y_min, y_max = min(tile_ul.y, tile_lr.y), max(tile_ul.y, tile_lr.y)
 
-URL_Template = 'https://api.mapbox.com/v4/mapbox.mapbox-traffic-v1.json?access_token=YOUR_ACCESS_TOKEN&bbox={}&zoom={}'
+# URL Template درست برای درخواست تایل‌ها از Mapbox
+URL_Template = 'https://api.mapbox.com/v4/mapbox.mapbox-traffic-v1/{z}/{x}/{y}.mvt?access_token=YOUR_ACCESS_TOKEN'
+
 for x in range(x_min, x_max + 1):
     for y in range(y_min, y_max + 1):
-        url = URL_Template.format(f'{BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]}', ZOOM)
+        url = URL_Template.format(z=ZOOM, x=x, y=y)
+
         outfile = os.path.join(OUT_DIR, f"{ZOOM}_{x}_{y}.mvt")
 
         try:
@@ -206,7 +209,7 @@ y_min, y_max = min(tile_ul.y, tile_lr.y), max(tile_ul.y, tile_lr.y)
 ```python
 for x in range(x_min, x_max + 1):
     for y in range(y_min, y_max + 1):
-        url = URL_Template.format(f'{BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]}', ZOOM)
+        url = URL_Template.format(z=ZOOM, x=x, y=y)
         outfile = os.path.join(OUT_DIR, f"{ZOOM}_{x}_{y}.mvt")
 
 ```
